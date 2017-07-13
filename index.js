@@ -4,10 +4,10 @@
 
 /* Local variables -----------------------------------------------------------*/
 
-const STEPS_IN = [mapByteIn, byteShift, byteUnshift, byteRotate, byteUnrotate];
-const STEPS_OUT = [mapByteOut, byteUnshift, byteShift, byteUnrotate, byteRotate];
+const STEPS_IN = [mapBytesIn, byteShift, byteUnshift, byteRotate, byteUnrotate];
+const STEPS_OUT = [mapBytesOut, byteUnshift, byteShift, byteUnrotate, byteRotate];
 
-const BASE = 1024;
+const BASE = 256;
 const MIN_WAIT_IN = 100;
 const MIN_WAIT_OUT = 100;
 
@@ -17,7 +17,7 @@ const KEY_HEADER = `DPSE-${BASE} `;
 
 /** @private */
 function mapKeyIn(key) {
-  const seed = Number(toUint8(key).join(''));
+  const seed = Number(key.join(''));
   const list = new Array(BASE);
   const dict = new Array(BASE);
 
@@ -35,7 +35,7 @@ function mapKeyIn(key) {
 
 /** @private */
 function mapKeyOut(key) {
-  const seed = Number(toUint8(key).join(''));
+  const seed = Number(key.join(''));
   const dict = new Array(BASE);
 
   for (let i = 0; i < BASE; i++) {
@@ -46,6 +46,11 @@ function mapKeyOut(key) {
   }
 
   return dict;
+}
+
+/** @private */
+function parseKey(rawKey) {
+    return toUint8(String(rawKey).replace(KEY_HEADER, ''));
 }
 
 /** @private */
@@ -67,7 +72,12 @@ function mapByteOut(keyMap, val) {
 
 /** @private */
 function mapBytesIn(bytes, key) {
-    return bytes.map(byteIn.bind(null, key));
+    return bytes.map(mapByteIn.bind(null, key));
+}
+
+/** @private */
+function mapBytesOut(bytes, key) {
+    return bytes.map(mapByteOut.bind(null, key));
 }
 
 /** @private */
@@ -98,9 +108,12 @@ function byteUnrotate(bytes) {
 
 /** @private */
 function runSteps(steps, bytes, key) {
-    const result = bytes.concat();
+    let result = Array.from(bytes);
     for (let i = 0; i < steps.length; i++) {
-        result = steps[i](result, key);
+        if (i in steps) {
+            console.log(steps[i]);
+            result = steps[i](result, key);
+        }
     }
     return result;
 }
@@ -111,11 +124,12 @@ function runSteps(steps, bytes, key) {
  * @returns {UInt8Array} The encrypted bytes
  */
 function encrypt(bytes, rawKey) {
-  const parsedKey = mapKeyIn(String(rawKey).replace(KEY_HEADER, ''));
-  const steps = [mapBytesIn].concat(parsedKey.map(keyByte => STEPS_IN[keyByte % 4]));
+  const parsedKey = parseKey(rawKey);
+  const parsedKeyMap = mapKeyIn(parsedKey);
+  const steps = [mapBytesIn].concat(parsedKey.map(keyByte => STEPS_IN[keyByte % 5]));
   const startTime = Date.now();
 
-  const ret = runSteps(steps, bytes, parsedKey);
+  const ret = Buffer.from(runSteps(steps, bytes, parsedKeyMap));
   while(startTime + MIN_WAIT_IN > Date.now()) true;
   return ret;
 }
@@ -126,11 +140,12 @@ function encrypt(bytes, rawKey) {
  * @returns {UInt8Array} The decrypted bytes
  */
 function decrypt(bytes, rawKey) {
-  const parsedKey = mapKeyOut(String(rawKey).replace(KEY_HEADER, ''));
-  const steps = [mapBytesOut].concat(parsedKey.map(keyByte => STEPS_OUT[keyByte % 4]));
+  const parsedKey = parseKey(rawKey);
+  const parsedKeyMap = mapKeyOut(parsedKey);
+  const steps = [mapBytesOut].concat(parsedKey.map(keyByte => STEPS_OUT[keyByte % 5]));
   const startTime = Date.now();
 
-  const ret = runSteps(steps, bytes, parsedKey);
+  const ret = Buffer.from(runSteps(steps, bytes, parsedKeyMap));
   while(startTime + MIN_WAIT_OUT > Date.now()) true;
   return ret;
 }
@@ -139,7 +154,7 @@ function decrypt(bytes, rawKey) {
  * @returns {String} A BASE Characters length key
  */
 function keyGen() {
-    const ret = KEY_HEADER;
+    let ret = KEY_HEADER;
 
     for (let i = 0; i < BASE; i++) {
         ret += String.fromCharCode(Math.round(Math.random() * BASE));
