@@ -1,4 +1,4 @@
-# Dynamically Permutted Step Encryption
+# Dynamically Permutated Step Encryption
 
 DPSE-1024
 
